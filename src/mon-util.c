@@ -19,6 +19,7 @@
 #include "angband.h"
 #include "cmd-core.h"
 #include "effects.h"
+#include "effect-handler.h"
 #include "game-world.h"
 #include "init.h"
 #include "mon-desc.h"
@@ -1007,12 +1008,39 @@ void monster_death(struct monster *mon, struct player *p, bool stats)
 }
 
 /**
+ * Handle the player exp gained by killing a monster
+ */
+void player_exp_gain_from_kill(struct player *p, const struct monster_race *race) {
+	uint32_t new_exp, new_exp_frac, div;
+
+	/* Player level */
+	div = p->lev;
+
+	/* Give some experience for the kill */
+	new_exp = ((long)race->mexp * race->level) / div;
+
+	/* Handle fractional experience */
+	new_exp_frac = ((((long)race->mexp * race->level) % div)
+					* 0x10000L / div) + p->exp_frac;
+
+	/* Keep track of experience */
+	if (new_exp_frac >= 0x10000L) {
+		new_exp++;
+		p->exp_frac = (uint16_t)(new_exp_frac - 0x10000L);
+	} else {
+		p->exp_frac = (uint16_t)new_exp_frac;
+	}
+
+	/* Gain experience */
+	player_exp_gain(p, new_exp);
+}
+
+/**
  * Handle the consequences of the killing of a monster by the player
  */
 static void player_kill_monster(struct monster *mon, struct player *p,
 		const char *note)
 {
-	int32_t div, new_exp, new_exp_frac;
 	struct monster_lore *lore = get_lore(mon->race);
 	char m_name[80];
 	char buf[80];
@@ -1066,24 +1094,6 @@ static void player_kill_monster(struct monster *mon, struct player *p,
 			msgt(soundfx, "You have slain %s.", m_name);
 	}
 
-	/* Player level */
-	div = p->lev;
-
-	/* Give some experience for the kill */
-	new_exp = ((long)mon->race->mexp * mon->race->level) / div;
-
-	/* Handle fractional experience */
-	new_exp_frac = ((((long)mon->race->mexp * mon->race->level) % div)
-					* 0x10000L / div) + p->exp_frac;
-
-	/* Keep track of experience */
-	if (new_exp_frac >= 0x10000L) {
-		new_exp++;
-		p->exp_frac = (uint16_t)(new_exp_frac - 0x10000L);
-	} else {
-		p->exp_frac = (uint16_t)new_exp_frac;
-	}
-
 	/* When the player kills a Unique, it stays dead */
 	if (rf_has(mon->race->flags, RF_UNIQUE)) {
 		char unique_name[80];
@@ -1103,7 +1113,7 @@ static void player_kill_monster(struct monster *mon, struct player *p,
 	}
 
 	/* Gain experience */
-	player_exp_gain(p, new_exp);
+	player_exp_gain_from_kill(p, mon->race);
 
 	/* Generate treasure */
 	monster_death(mon, p, false);
@@ -1185,15 +1195,16 @@ static bool monster_scared_by_damage(struct monster *mon, int dam)
  * This is a helper for melee handlers. It is very similar to mon_take_hit(),
  * but eliminates the player-oriented stuff of that function.
  *
- * \param context is the project_m context.
  * \param hurt_msg is the message if the monster is hurt (if any).
  * \return true if the monster died, false if it is still alive.
  */
-bool mon_take_nonplayer_hit(int dam, struct monster *t_mon,
+bool mon_take_nonplayer_hit(int dam, const struct source *source,
+                            struct monster *t_mon,
 							enum mon_messages hurt_msg,
 							enum mon_messages die_msg)
 {
 	assert(t_mon);
+	assert(source->what != SRC_PLAYER);
 
 	/* "Unique" or arena monsters can only be "killed" by the player */
 	if (rf_has(t_mon->race->flags, RF_UNIQUE)
@@ -1219,6 +1230,13 @@ bool mon_take_nonplayer_hit(int dam, struct monster *t_mon,
 
 		/* Generate treasure, etc */
 		monster_death(t_mon, player, false);
+
+		/* Monster was killed by a monster under the player's command */
+		if (source->what == SRC_MONSTER &&
+		    cave_monster(cave, source->which.monster)->m_timed[MON_TMD_COMMAND]) {
+			/* Player gains experience */
+			player_exp_gain_from_kill(player, t_mon->race);
+		}
 
 		/* Delete the monster */
 		delete_monster_idx(t_mon->midx);
@@ -1324,9 +1342,10 @@ void monster_take_terrain_damage(struct monster *mon)
 	/* Damage the monster */
 	if (square_isfiery(cave, mon->grid)) {
 		bool fear = false;
+		struct source origin = source_none();
 
 		if (!rf_has(mon->race->flags, RF_IM_FIRE)) {
-			mon_take_nonplayer_hit(100 + randint1(100), mon, MON_MSG_CATCH_FIRE,
+			mon_take_nonplayer_hit(100 + randint1(100), &origin, mon, MON_MSG_CATCH_FIRE,
 								   MON_MSG_DISINTEGRATES);
 		}
 

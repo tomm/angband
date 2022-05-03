@@ -324,7 +324,8 @@ static bool monster_damage_target(melee_effect_handler_context_t *context,
 		if (context->p->is_dead) return true;
 	} else {
 		bool dead = false;
-		dead = mon_take_nonplayer_hit(context->damage, context->t_mon,
+		struct source source = source_monster(context->mon->midx);
+		dead = mon_take_nonplayer_hit(context->damage, &source, context->t_mon,
 									  MON_MSG_NONE,	MON_MSG_DIE);
 		return (dead || no_further_monster_effect);
 	}
@@ -394,7 +395,8 @@ static void melee_effect_elemental(melee_effect_handler_context_t *context,
 		if (context->p) {
 			take_hit(context->p, context->damage, context->ddesc);
 		} else {
-			(void) mon_take_nonplayer_hit(context->damage, context->t_mon,
+			struct source source = source_monster(context->mon->midx);
+			(void) mon_take_nonplayer_hit(context->damage, &source, context->t_mon,
 										  hurt_msg, die_msg);
 		}
 	}
@@ -514,7 +516,8 @@ static void melee_effect_experience(melee_effect_handler_context_t *context,
 		update_smart_learn(context->mon, context->p, OF_HOLD_LIFE, 0, -1);
 		if (context->p->is_dead) return;
 	} else {
-		(void) mon_take_nonplayer_hit(context->damage, context->t_mon,
+		struct source source = source_monster(context->mon->midx);
+		(void) mon_take_nonplayer_hit(context->damage, &source, context->t_mon,
 									  MON_MSG_NONE, MON_MSG_DIE);
 		return;
 	}

@@ -1060,6 +1060,13 @@ static bool project_m_monster_attack(project_monster_handler_context_t *context,
 		/* Generate treasure, etc */
 		monster_death(mon, player, false);
 
+		/* Monster was killed by a monster under the player's command */
+		if (context->origin.what == SRC_MONSTER &&
+		    cave_monster(cave, context->origin.which.monster)->m_timed[MON_TMD_COMMAND]) {
+			/* Player gains experience */
+			player_exp_gain_from_kill(player, mon->race);
+		}
+
 		/* Delete the monster */
 		delete_monster_idx(m_idx);
 

@@ -21,6 +21,7 @@
 
 #include "monster.h"
 #include "mon-msg.h"
+#include "source.h"
 
 const char *describe_race_flag(int flag);
 void create_mon_flag_mask(bitflag *f, ...);
@@ -34,12 +35,14 @@ void monster_swap(struct loc grid1, struct loc grid2);
 void monster_wake(struct monster *mon, bool notify, int aware_chance);
 bool monster_can_see(struct chunk *c, struct monster *mon, struct loc grid);
 void become_aware(struct chunk *c, struct monster *m);
+void player_exp_gain_from_kill(struct player *p, const struct monster_race *race);
 void update_smart_learn(struct monster *mon, struct player *p, int flag,
 						int pflag, int element);
 bool find_any_nearby_injured_kin(struct chunk *c, const struct monster *mon);
 struct monster *choose_nearby_injured_kin(struct chunk *c, const struct monster *mon);
 void monster_death(struct monster *mon, struct player *p, bool stats);
-bool mon_take_nonplayer_hit(int dam, struct monster *t_mon,
+bool mon_take_nonplayer_hit(int dam, const struct source *source,
+                            struct monster *t_mon,
 							enum mon_messages hurt_msg,
 							enum mon_messages die_msg);
 bool mon_take_hit(struct monster *mon, struct player *p, int dam, bool *fear,
